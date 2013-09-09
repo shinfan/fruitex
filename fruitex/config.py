@@ -9,6 +9,6 @@ elif platform.uname()[1] == 'XINYUANs-MacBook-Air.local':
   BASE_DIR = r'/Users/Sue/Documents/workspace/fruitex'
   DEBUG = True
 else:
-  BASE_DIR = '/fruitex/'
+  BASE_DIR = '/fruitex-dev/'
 
 DOMAIN = 'fruitex.ca' #'108.171.244.148'
