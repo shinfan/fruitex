@@ -27,19 +27,19 @@ def trim(s):
   return re.sub('(^\s+|\s+$)', '', s)
 
 
-def loadBookstoreItems():
+def loadBookstoreItems(directory):
   bookstore = Store(name = 'bookstore', address = "")
   bookstore.save()
   items = []
-  for fname in _getAllCsvFiles('data/bookstore/'):
-    addBookstoreItems(fname)
+  for fname in _getAllCsvFiles(directory):
+    addBookstoreItems(fname, False)
 
-def loadSobeysItems():
+def loadSobeysItems(directory):
   sobeys = Store(name = 'sobeys', address = "450 Columbia St W, Waterloo ON N2T 2W1")
   sobeys.save()
   items = []
-  for fname in _getAllCsvFiles('data/sobeys/'):
-    addSobeysItems(fname)
+  for fname in _getAllCsvFiles(directory):
+    addSobeysItems(fname, False)
 
 def fetchCategory(store):
   res = set()
@@ -65,7 +65,37 @@ def fixTypo():
       o.category = o.category.replace('Goceries', 'Groceries')
       o.save()
       ct += 1
-  print '%d items fixed' % ct
+  print '%d Goceries typo fixed' % ct
+  ct=0
+  for o in Item.objects.filter(category='Produce->Fruits_Vegetables->Fruits'):
+    o.category = 'Produce->Fruit & Vegetable->Fruit'
+    o.save()
+    ct+=1
+  print '%d fruit category fixed' % ct
+  ct=0
+  for o in Item.objects.filter(category='Produce->Fruits_Vegetables->Vegetables'):
+    o.category = 'Produce->Fruit & Vegetable->Vegetable'
+    o.save()
+    ct+=1
+  print '%d vegerable category fixed' % ct
+  for it in Item.objects.filter(sku='BDM031'):
+    if it.name == 'Natrel Organic Milk 3.8% M.E. 2L':
+      it.name = 'Natrel Organic Milk 3.8% M.E. 4L'
+      it.save()
+      print 'Natrel Organic Milk 3.8% M.E. 2L name updated'
+  for it in Item.objects.filter(sku='HLPCFH088'):
+    if it.name == 'Compliments Tampon Super 20Pk':
+      it.name = 'Compliments Tampon Regular 20Pk'
+      it.save()
+      print 'Compliments Tampon Super 20Pk name updated'
+  ct = 0
+  its = Item.objects.filter(category='Groceries->Dairy->Milk')
+  ct += len(its)
+  its.update(category='Groceries->Dairy & Dairy Products->Milk')
+  its = Item.objects.filter(category='Groceries->Dairy->Yogurt')
+  ct += len(its)
+  its.update(category='Groceries->Dairy & Dairy Products->Yogurt')
+  print '%d dairy category fixed' % ct
 
 def initItemSoldNumber():
   ct = {}
@@ -140,18 +170,20 @@ def addSobeysItems(fname, check_only):
 
   print "%d items to write" % len(items)
   problemFiles = set()
+  newItemCt=0
   for item,fname in items:
     try:
       if item[CATEGORY] and item[TITLE] and item[SKU] and item[PRICE] \
           and item[TAX_STATUS] and item[TAX_CLASS]:
-        if check_only:
-          if len(Item.objects.filter(store=sobeys, name=item[TITLE])) > 0:
-            print 'item %s already exists' % item[TITLE]
-        else:
-          Item(store = sobeys, category = item[CATEGORY],
-              name = item[TITLE], price = item[PRICE], sku = item[SKU],
-              tax_status = item[TAX_STATUS], tax_class = item[TAX_CLASS],
-              remark = getRemark(item)).save()
+        if len(Item.objects.filter(store=sobeys, name=item[TITLE])) == 0:
+          newItemCt+=1
+          if not check_only:
+            Item(store = sobeys, category = item[CATEGORY],
+                name = item[TITLE], price = item[PRICE], sku = item[SKU],
+                tax_status = item[TAX_STATUS], tax_class = item[TAX_CLASS],
+                remark = getRemark(item)).save()
+        elif check_only:
+          print "duplicate item %s" % item[TITLE]
       else:
         if fname in problemFiles:
           continue
@@ -161,6 +193,7 @@ def addSobeysItems(fname, check_only):
           print item
     except Exception as e:
       print e, fname, item
+  print "%d new items" % newItemCt
 
 def addBookstoreItems(fname, check_only):
   bookstore = Store.objects.filter(name='bookstore')[0]
@@ -223,6 +256,7 @@ def addBookstoreItems(fname, check_only):
   print "%d items to write" % len(items)
   addedBooks = set()
   problemFiles = set()
+  newItemCt=0
   for item,fname in items:
     try:
       bookid = (item[TITLE], item[AUTHOR], item[ED], item[PRICE], item[DPT], item[CRS])
@@ -230,16 +264,17 @@ def addBookstoreItems(fname, check_only):
       addedBooks.add(bookid)
       if item[CATEGORY] and item[TITLE] and item[PRICE] \
           and item[TAX_STATUS] and item[TAX_CLASS]:
-        if check_only:
-          if len(Item.objects.filter(store=bookstore, name=item[TITLE])) > 0:
-            print 'item %s already exists' % item[TITLE]
-        else:
-          Item(store = bookstore, category = item[CATEGORY],
-              name = item[TITLE], price = item[PRICE],
-              sku = os.path.splitext(item[PIC])[0],
-              out_of_stock = (item[OUT_OF_STOCK] == '*'),
-              tax_status = item[TAX_STATUS], tax_class = item[TAX_CLASS],
-              remark = getRemark(item)).save()
+        if len(Item.objects.filter(store=bookstore, name=item[TITLE])) == 0:
+          newItemCt+=1
+          if not check_only:
+            Item(store = bookstore, category = item[CATEGORY],
+                name = item[TITLE], price = item[PRICE],
+                sku = os.path.splitext(item[PIC])[0],
+                out_of_stock = (item[OUT_OF_STOCK] == '*'),
+                tax_status = item[TAX_STATUS], tax_class = item[TAX_CLASS],
+                remark = getRemark(item)).save()
+        elif check_only:
+          print "duplicate item %s" % item[TITLE]
       else:
         if fname in problemFiles:
           continue
@@ -249,12 +284,26 @@ def addBookstoreItems(fname, check_only):
           print item
     except Exception as e:
       print e, fname, item
+  print "%d new items" % newItemCt
 
 def addItems(store, f, check_only=False):
   if store == 'sobeys':
-    addSobeysItems(f, check_only)
+    for fname in _getAllCsvFiles(f):
+      addSobeysItems(fname, check_only)
   elif store == 'bookstore':
-    addBookstoreItems(f, check_only)
+    for fname in _getAllCsvFiles(f):
+      addBookstoreItems(fname, check_only)
+  else:
+    print "unknown store: %s" % store
+
+def loadItem(store, f):
+  if f == '':
+    print 'need to specify directory'
+    return
+  if store == 'sobeys':
+    loadSobeysItems(f)
+  elif store == 'bookstore':
+    loadBookstoreItems(f)
   else:
     print "unknown store: %s" % store
 
@@ -267,8 +316,7 @@ def main(argv):
   if _arg(1) == 'clear':
     clearItems(_arg(2))
   elif _arg(1) == 'load':
-    loadSobeysItems()
-    loadBookstoreItems()
+    loadItem(_arg(2), _arg(3))
   elif _arg(1) == 'add':
     addItems(_arg(2), _arg(3))
   elif _arg(1) == 'check_item':
